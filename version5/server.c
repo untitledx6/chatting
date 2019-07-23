@@ -2,16 +2,19 @@
 #include <sys/shm.h> //内存共享API所需的库
 #include <unistd.h> //进程开辟所需的库
 #include <string.h>
+#include <pthread.h> //多线程编程所需的库
 #include <sys/socket.h> //套接字所需的库
 #include <netinet/in.h>
 #include <stdlib.h>
 
 #define TEXT_SIZE 500
 int shmid; //共享内存标识
-
+int sdd;
+int ret = 0;
 //函数声明
 int create_shm(void); //创建共享内存的函数
 void child(int sd, int id);//fork出的进程所执行的函数
+void *pthread_func(void *arg);
 
 struct text_buf
 {
@@ -67,22 +70,61 @@ int main(int argc, char **argv) {
 }
 
 void child(int sd, int id) {
+	//变量定义
 	struct text_buf *buffer = (struct text_buf *)shmat(shmid, NULL, 0); //子进程内存映射共享内存
+	char client_buf[TEXT_SIZE]; //缓存客户端发来的数据
+	char server_buf[TEXT_SIZE]; //缓存共享内存中的数据
+	int cangetbuf = 1;
+	int n;
+	pthread_t pth;
+	int **retval;
+
+	//初始化
+	sdd = sd;	
+	buffer->written = 0;	
+	/**(buffer->text)	= 'a';
+	*(buffer->text + 1) = 0;*/
 	
-	/*while(1) {
-		printf("gagagaga\n");
-	}*/
-	while(1) {
-		if(id == 1) {
-			//strcpy(buffer->text, "h");
-			shmdt((void *)buffer);
+	//pthread_create(&pth, NULL, pthread_func, client_buf);
+	//	printf("fafdaf\n");
+	while(1) {		
+		//printf("buffer->text is %s\n", buffer->text);
+		//printf("buffer->text is %s    the ret is %d\n", buffer->text, ret)    ;
+
+		if(cangetbuf) {
+			pthread_create(&pth, NULL, pthread_func, client_buf);
+			//	pthread_join(pth, (void **)retval);
+			cangetbuf = 0;
+			/*if((n = read(sd, client_buf, TEXT_SIZE)) > 0) {
+				client_buf[n] = 0;
+				cangetbuf = 0;
+			}*/
 		}
-		if(id == 2) {
-			write(sd, buffer->text, strlen(buffer->text));
-			shmdt((void *)buffer);
+		//printf("ID:%d   buffer->text is %s    the ret is %d\n", id, buffer->text, ret);
+		if( (ret == 1) && (cangetbuf == 0) && (buffer->written == 0)) {
+			//pthread_join(pth, (void **)retval);
+			buffer->written = 1;
+			strcpy(buffer->text, client_buf);
+			cangetbuf = 1;
+			ret = 0;
+			buffer->written = 0;
 		}
-		printf("g\n");
+  		if(strcmp(server_buf, buffer->text) != 0) {
+			strcpy(server_buf, buffer->text);
+			write(sd, server_buf, strlen(server_buf));	
+		}
 	}
+	
+
+	/*if(id == 1) {
+		strcpy(buffer->text, "hhhhhhhhhhhhhhhhh");
+		shmdt((void *)buffer);
+	}
+	if(id == 2) {
+		write(sd, buffer->text, strlen(buffer->text));
+		shmdt((void *)buffer);
+	}*/
+
 
 	/*while(1){
         int n;
@@ -94,9 +136,19 @@ void child(int sd, int id) {
             printf("%d sent %s \n", id, recvline);
         }
     }*/
-	while(1);   	
 }
 
 int create_shm(void) {
 	return shmget(0, sizeof(struct text_buf), 0666 | IPC_PRIVATE);	
+}
+
+void *pthread_func(void *arg) {
+	int n;
+	pthread_detach(pthread_self());
+	//printf("into the pthread, read to get Text\n");
+	n = read(sdd, (char *)arg, TEXT_SIZE);
+	*((char *)arg + n) = 0;
+	//printf("get the Text is %s\n", (char *)arg);
+	ret = 1;
+	pthread_exit(NULL);
 }

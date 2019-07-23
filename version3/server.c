@@ -68,21 +68,47 @@ int main(int argc, char **argv) {
 
 void child(int sd, int id) {
 	struct text_buf *buffer = (struct text_buf *)shmat(shmid, NULL, 0); //子进程内存映射共享内存
+	char client_buf[TEXT_SIZE]; //缓存客户端发来的数据
+	char server_buf[TEXT_SIZE]; //缓存共享内存中的数据
+	int cangetbuf = 1;
+	int n;
 	
-	/*while(1) {
-		printf("gagagaga\n");
-	}*/
-	while(1) {
-		if(id == 1) {
-			//strcpy(buffer->text, "h");
-			shmdt((void *)buffer);
+	buffer->written = 0;	
+	*(buffer->text)	= 'a';
+	*(buffer->text + 1) = 0;
+	
+	printf("fafdaf\n");
+	while(1) {		
+		//printf("buffer->text is %s\n", buffer->text);
+		if(cangetbuf) {
+			if((n = read(sd, client_buf, TEXT_SIZE)) > 0) {
+				client_buf[n] = 0;
+				cangetbuf = 0;
+			}
 		}
-		if(id == 2) {
-			write(sd, buffer->text, strlen(buffer->text));
-			shmdt((void *)buffer);
+	//	printf("buffer->text is %s\n", buffer->text);
+		if((cangetbuf == 0) && (buffer->written == 0)) {
+			buffer->written = 1;
+			strcpy(buffer->text, client_buf);
+			cangetbuf = 1;
+			buffer->written = 0;
 		}
-		printf("g\n");
+  		if(strcmp(server_buf, buffer->text) != 0) {
+			strcpy(server_buf, buffer->text);
+			write(sd, server_buf, strlen(server_buf));	
+		}
 	}
+	
+
+	/*if(id == 1) {
+		strcpy(buffer->text, "hhhhhhhhhhhhhhhhh");
+		shmdt((void *)buffer);
+	}
+	if(id == 2) {
+		write(sd, buffer->text, strlen(buffer->text));
+		shmdt((void *)buffer);
+	}*/
+
 
 	/*while(1){
         int n;
@@ -94,7 +120,6 @@ void child(int sd, int id) {
             printf("%d sent %s \n", id, recvline);
         }
     }*/
-	while(1);   	
 }
 
 int create_shm(void) {
